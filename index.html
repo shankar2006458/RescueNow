@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="RescueNow — emergency safety app. Send SOS, share location, call help in seconds." />
+<meta name="theme-color" content="#0f172a" />
+<title>RescueNow — Help is one tap away</title>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg:      '#0f172a',
+          card:    '#1e293b',
+          card2:   '#273449',
+          border:  '#334155',
+          muted:   '#94a3b8',
+          danger:  '#ef4444',
+          danger2: '#dc2626',
+          info:    '#3b82f6',
+          safe:    '#22c55e',
+        },
+        boxShadow: {
+          glow: '0 0 60px 10px rgba(239,68,68,.35)',
+        },
+        borderRadius: { '2xl': '1rem', '3xl': '1.5rem' }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { background: #0f172a; color: #fff; -webkit-tap-highlight-color: transparent; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .glass {
+    background: rgba(30,41,59,.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .tap { transition: transform .12s ease; }
+  .tap:active { transform: scale(.95); }
+
+  @keyframes sos-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.7), 0 0 60px 10px rgba(239,68,68,.35); }
+    50%     { box-shadow: 0 0 0 32px rgba(239,68,68,0), 0 0 80px 20px rgba(239,68,68,.45); }
+  }
+  @keyframes breath { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  .sos-pulse { animation: sos-pulse 2s ease-out infinite, breath 3s ease-in-out infinite; }
+
+  @keyframes toast-in { from{transform:translate(-50%,120%);opacity:0} to{transform:translate(-50%,0);opacity:1} }
+  .toast-in { animation: toast-in .35s cubic-bezier(.2,.8,.2,1); }
+
+  @keyframes fade-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation: fade-in .25s ease-out; }
+
+  @keyframes shake { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
+  .shake { animation: shake 1s ease-in-out infinite; }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .nav-btn.active {
+    background: #ef4444;
+    color: #fff;
+    transform: scale(1.05);
+  }
+
+  /* Hide number input arrows */
+  input[type=tel]::-webkit-outer-spin-button,
+  input[type=tel]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* SVG icons sizing */
+  .icon { width: 1.25rem; height: 1.25rem; stroke-width: 2; }
+
+
+  /* Premium scrollbar */
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #3b82f6, #22c55e);
+  border-radius: 10px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #2563eb, #16a34a);
+}
+
+@keyframes list-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.list-item {
+  animation: list-in 0.25s ease;
+}
+.bg-safe {
+  background: #22c55e;
+  color: white;
+}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- Reusable SVG icons -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.5 0 2.8-1 3-2.5.2-1.4-.6-2.7-1.5-3.5C8 8 11 2 11 2s5 7 5 11a5 5 0 0 1-10 0c0-1.5.5-2.7 1.2-3.5"/></symbol>
+    <symbol id="i-ambulance" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10H6"/><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.28a1 1 0 0 0-.4-.86L18 10h-4"/><path d="M8 8v4"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></symbol>
+    <symbol id="i-siren" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21h14"/><path d="M21 12h1M2 12h1M12 2v1M19 5l.7-.7M4.3 4.3 5 5"/></symbol>
+    <symbol id="i-phone-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 2 16 8 22 8"/><path d="m22 2-6 6"/><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21.17 6.17a3 3 0 0 0-4.24-4.24L3 15.86V21h5.14L21.17 6.17z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-hospital" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v4M9 8h6"/><path d="M3 22V8a2 2 0 0 1 2-2h2V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v14"/></symbol>
+  </defs>
+</svg>
+
+<div class="mx-auto flex min-h-screen max-w-md flex-col">
+
+  <main class="flex-1">
+
+    <!-- ============== HOME ============== -->
+    <section id="screen-home" class="screen active px-5 pb-32 pt-4 fade-in">
+      <header class="glass flex items-center justify-between rounded-2xl px-4 py-3">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-card2">
+            <svg class="icon"><use href="#i-user"/></svg>
+          </div>
+          <div>
+            <p class="text-xs text-muted">Welcome</p>
+            <p class="text-sm font-semibold">RescueNow</p>
+          </div>
+        </div>
+        <button class="tap flex h-10 w-10 items-center justify-center rounded-full bg-card2" aria-label="Settings" data-goto="settings">
+          <svg class="icon"><use href="#i-settings"/></svg>
+        </button>
+      </header>
+
+      <div class="mt-8 flex flex-col items-center">
+        <div class="relative" style="width:240px;height:240px">
+          <svg class="absolute inset-0 -rotate-90" width="240" height="240" aria-hidden="true">
+            <circle cx="120" cy="120" r="116" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="8"/>
+            <circle id="sos-progress" cx="120" cy="120" r="116" fill="none" stroke="#fff" stroke-width="8"
+              stroke-linecap="round" stroke-dasharray="728.85" stroke-dashoffset="728.85"
+              style="transition: stroke-dashoffset .3s ease"/>
+          </svg>
+          <button id="sos-btn"
+            class="sos-pulse tap absolute inset-3 flex select-none flex-col items-center justify-center rounded-full bg-danger"
+            aria-label="Emergency SOS — press and hold for 3 seconds">
+            <span id="sos-label" class="text-5xl font-black tracking-widest">SOS</span>
+            <span id="sos-sub" class="mt-1 text-xs font-medium uppercase tracking-[0.25em] opacity-90">Emergency</span>
+          </button>
+        </div>
+        <p class="mt-5 text-sm text-muted">Tap &amp; hold for help</p>
+      </div>
+
+      <div class="mt-8">
+        <h2 class="mb-3 px-1 text-xs font-semibold uppercase tracking-wider text-muted">Quick Actions</h2>
+        <div class="grid grid-cols-2 gap-3">
+          <a href="tel:100" class="tap flex flex-col items-start gap-3 rounded-2xl bg-card p-4 ring-1 ring-border">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-card2 text-info"><svg class="icon"><use href="#i-shield"/></svg></div>
+            <div><p class="text-sm font-semibold">Police</p><p class="text-xs text-muted">100</p></div>
+          </a>
+          <a href="tel:102" class="tap flex flex-col items-start gap-3 rounded-2xl bg-card p-4 ring-1 ring-border">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-card2 text-safe"><svg class="icon"><use href="#i-ambulance"/></svg></div>
+            <div><p class="text-sm font-semibold">Ambulance</p><p class="text-xs text-muted">102</p></div>
+          </a>
+          <a href="tel:101" class="tap flex flex-col items-start gap-3 rounded-2xl bg-card p-4 ring-1 ring-border">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-card2 text-danger"><svg class="icon"><use href="#i-flame"/></svg></div>
+            <div><p class="text-sm font-semibold">Fire</p><p class="text-xs text-muted">101</p></div>
+          </a>
+          <button id="share-loc" class="tap flex flex-col items-start gap-3 rounded-2xl bg-card p-4 text-left ring-1 ring-border">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-card2 text-info"><svg class="icon"><use href="#i-share"/></svg></div>
+            <div><p class="text-sm font-semibold">Share Location</p><p class="text-xs text-muted">Send GPS</p></div>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-3">
+        <button id="siren-btn" class="tap flex items-center justify-center gap-2 rounded-2xl bg-card p-4 ring-1 ring-border">
+          <svg id="siren-icon" class="icon"><use href="#i-siren"/></svg>
+          <span id="siren-label" class="text-sm font-semibold">Sound Siren</span>
+        </button>
+        <button id="fake-call-btn" class="tap flex items-center justify-center gap-2 rounded-2xl bg-card p-4 ring-1 ring-border">
+          <svg class="icon text-info"><use href="#i-phone-in"/></svg>
+          <span class="text-sm font-semibold">Fake Call</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============== CONTACTS ============== -->
+    <section id="screen-contacts" class="screen px-5 pb-32 pt-6 fade-in">
+      <div class="flex items-end justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">Emergency Contacts</h1>
+          <p class="text-sm text-muted">People notified during an SOS</p>
+        </div>
+        <button id="add-contact" class="tap flex h-11 w-11 items-center justify-center rounded-full bg-danger shadow-lg" aria-label="Add contact">
+          <svg class="icon"><use href="#i-plus"/></svg>
+        </button>
+      </div>
+      <ul id="contacts-list" class="mt-4 flex flex-col gap-3"></ul>
+    </section>
+
+    <!-- ============== MAP ============== -->
+    <section id="screen-map" class="screen px-5 pb-32 pt-6 fade-in">
+      <div>
+        <h1 class="text-2xl font-bold">Live Map</h1>
+        <p class="text-sm text-muted">Find your location and nearby help</p>
+      </div>
+
+      <div class="relative mt-4 h-72 overflow-hidden rounded-3xl bg-card ring-1 ring-border shadow-inner"> 
+        <div id="map" class="h-full w-full"></div>
+      </div>
+
+      <div class="mt-4 rounded-2xl bg-card p-4 ring-1 ring-border">
+        <p class="text-xs uppercase tracking-wider text-muted">Coordinates</p>
+        <p id="coords" class="mt-1 font-mono text-sm">—</p>
+        <a id="maps-link" href="#" target="_blank" rel="noopener" class="mt-2 hidden text-xs text-info underline">Open in Google Maps</a>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-3">
+        <button id="locate-btn" class="tap rounded-2xl bg-info py-4 font-semibold">Get My Location</button>
+        <button id="nearby-btn" class="tap rounded-2xl bg-safe py-4 font-semibold">Find Nearby Help</button>
+      </div>
+      <div class="relative mt-4">
+
+        <!-- Top fade -->
+        <div class="pointer-events-none absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-bg to-transparent z-10"></div>
+
+        <!-- Scroll list -->
+        <div id="nearby-list"
+          class="max-h-64 overflow-y-auto pb-4 pr-1 space-y-3 scroll-smooth custom-scroll">
+        </div>
+
+        <!-- Bottom fade -->
+        <div class="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-bg to-transparent z-10"></div>
+
+      </div>
+
+    </section>
+
+    <!-- ============== SETTINGS ============== -->
+    <section id="screen-settings" class="screen px-5 pb-32 pt-6 fade-in">
+      <div>
+        <h1 class="text-2xl font-bold">Settings</h1>
+        <p class="text-sm text-muted">Personalize your emergency alert</p>
+      </div>
+
+      <div class="mt-5 rounded-2xl bg-card p-4 ring-1 ring-border">
+        <label class="flex flex-col gap-2 text-sm">
+          <span class="font-semibold">Default emergency message</span>
+          <span class="text-xs text-muted">Sent to your contacts along with your live location link.</span>
+          <textarea id="msg-input" rows="4"
+            class="mt-1 resize-none rounded-xl bg-card2 px-4 py-3 text-white outline-none ring-1 ring-transparent focus:ring-danger"></textarea>
+        </label>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between rounded-2xl bg-card p-4 ring-1 ring-border">
+        <div>
+          <p class="font-semibold">Sound alerts</p>
+          <p class="text-xs text-muted">Play siren and alert tones</p>
+        </div>
+        <button id="sound-toggle" role="switch" aria-checked="true"
+          class="relative h-7 w-12 rounded-full bg-safe transition">
+          <span id="sound-knob" class="absolute top-0.5 left-[22px] h-6 w-6 rounded-full bg-white transition-all"></span>
+        </button>
+      </div>
+
+      <div class="mt-4 rounded-2xl bg-card p-4 ring-1 ring-border">
+        <p class="font-semibold">Send Alerts Via</p>
+        <p class="text-xs text-muted mb-3">Choose how emergency messages are sent</p>
+
+        <div class="flex gap-3">
+          <button id="mode-wa" class="flex-1 py-2 rounded-xl bg-card2 text-sm">WhatsApp</button>
+          <button id="mode-sms" class="flex-1 py-2 rounded-xl bg-card2 text-sm">SMS</button>
+        </div>
+      </div>
+
+      <button id="save-settings" class="tap mt-5 w-full rounded-2xl bg-danger py-4 font-semibold shadow-lg">Save settings</button>
+
+      <p class="mt-8 text-center text-xs text-muted">Created By ~ Shankar Prasad Pyke </p>
+    </section>
+
+  </main>
+
+  <!-- Bottom nav -->
+  <nav class="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md p-3" aria-label="Primary">
+    <div class="glass flex items-center justify-around rounded-2xl px-2 py-2 shadow-2xl">
+      <button class="nav-btn tap active flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted" data-tab="home">
+        <svg class="icon"><use href="#i-home"/></svg><span>Home</span>
+      </button>
+      <button class="nav-btn tap flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted" data-tab="contacts">
+        <svg class="icon"><use href="#i-users"/></svg><span>Contacts</span>
+      </button>
+      <button class="nav-btn tap flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted" data-tab="map">
+        <svg class="icon"><use href="#i-map"/></svg><span>Map</span>
+      </button>
+      <button class="nav-btn tap flex min-w-[64px] flex-col items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-muted" data-tab="settings">
+        <svg class="icon"><use href="#i-settings"/></svg><span>Settings</span>
+      </button>
+    </div>
+  </nav>
+
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-2xl bg-card/95 px-5 py-3 text-sm font-medium text-white shadow-2xl ring-1 ring-border backdrop-blur">
+  <span class="mr-2 inline-block h-2 w-2 rounded-full bg-safe align-middle"></span>
+  <span id="toast-msg">Alert sent successfully</span>
+</div>
+
+<!-- Contact modal -->
+<div id="contact-modal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur sm:items-center">
+  <div class="w-full max-w-md rounded-3xl bg-card p-6 ring-1 ring-border fade-in">
+    <div class="mb-4 flex items-center justify-between">
+      <h2 id="modal-title" class="text-lg font-bold">Add contact</h2>
+      <button id="modal-close" class="tap rounded-full bg-card2 p-2" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="flex flex-col gap-3">
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-muted">Name</span>
+        <input id="contact-name" class="rounded-xl bg-card2 px-4 py-3 text-white outline-none ring-1 ring-transparent focus:ring-danger" placeholder="Mom"/>
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-muted">Phone</span>
+        <input id="contact-phone" type="tel" class="rounded-xl bg-card2 px-4 py-3 text-white outline-none ring-1 ring-transparent focus:ring-danger" placeholder="+1 555 000 0000"/>
+      </label>
+      <button id="modal-save" class="tap mt-2 rounded-xl bg-danger py-3 font-semibold">Save contact</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fake call overlay -->
+<div id="fake-call" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-between bg-bg/95 p-10 backdrop-blur fade-in">
+  <div class="mt-16 flex flex-col items-center gap-4">
+    <p class="text-sm uppercase tracking-[0.3em] text-muted">Incoming call</p>
+    <div class="flex h-32 w-32 items-center justify-center rounded-full bg-card2">
+      <svg width="56" height="56" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <p class="text-2xl font-semibold">Mom</p>
+    <p class="text-sm text-muted">mobile</p>
+  </div>
+  <div class="flex w-full items-center justify-around pb-10">
+    <button class="fake-close tap flex h-16 w-16 items-center justify-center rounded-full bg-danger shadow-2xl" aria-label="Decline">
+      <svg class="icon" style="width:1.75rem;height:1.75rem;transform:rotate(135deg)"><use href="#i-phone"/></svg>
+    </button>
+    <button class="fake-close tap flex h-16 w-16 items-center justify-center rounded-full bg-safe shadow-2xl" aria-label="Accept">
+      <svg class="icon" style="width:1.75rem;height:1.75rem"><use href="#i-phone"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  /* RescueNow — vanilla JS logic */
+(() => {
+  // ---------- Storage ----------
+  const CK = 'rescuenow.contacts';
+  const SK = 'rescuenow.settings';
+  const DEFAULT_CONTACTS = [
+    { id: '1', name: 'Mom', phone: '+10000000001' },
+    { id: '2', name: 'Dad', phone: '+10000000002' },
+  ];
+  const DEFAULT_SETTINGS = { 
+    message: 'I need help. This is my location:', 
+    soundOn: true,
+    sendMode: 'sms' // default
+  };
+  const loadContacts = () => { try { return JSON.parse(localStorage.getItem(CK)) || DEFAULT_CONTACTS; } catch { return DEFAULT_CONTACTS; } };
+  const saveContacts = (c) => localStorage.setItem(CK, JSON.stringify(c));
+  const loadSettings = () => { try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SK)) || {}); } catch { return DEFAULT_SETTINGS; } };
+  const saveSettings = (s) => localStorage.setItem(SK, JSON.stringify(s));
+
+  let contacts = loadContacts();
+  let settings = loadSettings();
+
+  // ---------- Toast ----------
+  const toastEl = document.getElementById('toast');
+  const toastMsg = document.getElementById('toast-msg');
+  let toastTimer;
+  const toast = (msg) => {
+    toastMsg.textContent = msg;
+    toastEl.classList.remove('hidden');
+    toastEl.classList.add('toast-in');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2600);
+  };
+
+  // ---------- Tabs ----------
+  const showTab = (tab) => {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-' + tab).classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+if (tab === "map") {
+  setTimeout(() => {
+    if (!map) {
+      initMap();
+    } else {
+      map.invalidateSize(); // ✅ FIX
+    }
+  }, 200);
+}
+  };
+  document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.goto)));
+
+  // ---------- Location ----------
+  const getLocationLink = () => new Promise(resolve => {
+    if (!('geolocation' in navigator)) return resolve('');
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve(`https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`),
+      () => resolve(''),
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  });
+
+  // ---------- SOS button (hold 3s) ----------
+  const HOLD_MS = 3000;
+  const CIRC = 728.85; // 2 * PI * 116
+  const sosBtn = document.getElementById('sos-btn');
+  const sosLabel = document.getElementById('sos-label');
+  const sosSub = document.getElementById('sos-sub');
+  const sosRing = document.getElementById('sos-progress');
+  let sosStart = null, sosRaf = null, holding = false;
+
+  const resetSos = () => {
+    if (sosRaf) cancelAnimationFrame(sosRaf);
+    sosRaf = null; sosStart = null; holding = false;
+    sosBtn.classList.add('sos-pulse');
+    sosLabel.textContent = 'SOS';
+    sosSub.textContent = 'Emergency';
+    sosRing.style.transition = 'stroke-dashoffset .3s ease';
+    sosRing.style.strokeDashoffset = CIRC;
+  };
+
+  const tick = (t) => {
+    if (sosStart == null) sosStart = t;
+    const p = Math.min(1, (t - sosStart) / HOLD_MS);
+    sosRing.style.transition = 'none';
+    sosRing.style.strokeDashoffset = String(CIRC * (1 - p));
+    const remain = Math.max(1, Math.ceil((1 - p) * 3));
+    sosLabel.textContent = String(remain);
+    sosSub.textContent = 'Hold…';
+    if (p >= 1) { triggerSos(); resetSos(); return; }
+    sosRaf = requestAnimationFrame(tick);
+  };
+
+  const startSos = (e) => {
+    e.preventDefault();
+    if (holding) return;
+    holding = true;
+    sosBtn.classList.remove('sos-pulse');
+    try { sosBtn.setPointerCapture(e.pointerId); } catch {}
+    sosRaf = requestAnimationFrame(tick);
+  };
+
+  sosBtn.addEventListener('pointerdown', startSos);
+  sosBtn.addEventListener('pointerup', resetSos);
+  sosBtn.addEventListener('pointercancel', resetSos);
+  sosBtn.addEventListener('pointerleave', resetSos);
+
+  const triggerSos = async () => {
+    const link = await getLocationLink();
+    const text = encodeURIComponent(`${settings.message} ${link}`.trim());
+    if (!contacts.length) return toast('No contacts added');
+
+    contacts.forEach(c => {
+      const phone = c.phone.replace(/\D/g, '');
+
+      if (settings.sendMode === 'whatsapp') {
+        window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+      } else {
+        window.location.href = `sms:${phone}?body=${text}`;
+      }
+    });
+    toast('Alert sent successfully');
+  };
+
+  // ---------- Share location ----------
+  document.getElementById('share-loc').addEventListener('click', async () => {
+    const link = await getLocationLink();
+    if (!link) return toast('Location unavailable');
+    const text = encodeURIComponent(`${settings.message} ${link}`);
+    if (!contacts.length) return toast('No contacts added');
+
+    contacts.forEach(c => {
+      const phone = c.phone.replace(/\D/g, '');
+
+      if (settings.sendMode === 'whatsapp') {
+        window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+      } else {
+        window.location.href = `sms:${phone}?body=${text}`;
+      }
+    });
+    toast('Location shared');
+  });
+
+  // ---------- Siren ----------
+  let sirenAudio = null;
+  let sirenOn = false;
+  const sirenBtn = document.getElementById('siren-btn');
+  const sirenLabel = document.getElementById('siren-label');
+  const sirenIcon = document.getElementById('siren-icon');
+
+  const ensureSiren = () => {
+    if (sirenAudio) return sirenAudio;
+    sirenAudio = new Audio('https://actions.google.com/sounds/v1/alarms/spaceship_alarm.ogg');
+    sirenAudio.loop = true;
+    sirenAudio.volume = 1;
+    sirenAudio.preload = "auto"; // ✅ important
+    sirenAudio.load(); // ✅ force preload
+    return sirenAudio;
+  };
+  ensureSiren();
+
+  sirenBtn.addEventListener('click', () => {
+    if (!settings.soundOn) return toast('Sound is disabled in settings');
+    const a = ensureSiren();
+    if (sirenOn) {
+      a.pause(); a.currentTime = 0; sirenOn = false;
+      sirenBtn.classList.remove('bg-danger'); sirenBtn.classList.add('bg-card');
+      sirenLabel.textContent = 'Sound Siren';
+      sirenIcon.classList.remove('shake');
+    } else {
+      a.play().catch(() => toast('Tap again to allow sound'));
+      sirenOn = true;
+      sirenBtn.classList.remove('bg-card'); sirenBtn.classList.add('bg-danger');
+      sirenLabel.textContent = 'Stop Siren';
+      sirenIcon.classList.add('shake');
+    }
+  });
+
+  // ---------- Fake call ----------
+  const fakeCall = document.getElementById('fake-call');
+  document.getElementById('fake-call-btn').addEventListener('click', () => fakeCall.classList.remove('hidden'));
+  document.querySelectorAll('.fake-close').forEach(b => b.addEventListener('click', () => fakeCall.classList.add('hidden')));
+
+  // ---------- Contacts ----------
+  const listEl = document.getElementById('contacts-list');
+  const renderContacts = () => {
+    listEl.innerHTML = '';
+    if (contacts.length === 0) {
+      listEl.innerHTML = `<li class="rounded-2xl bg-card p-6 text-center text-sm text-muted ring-1 ring-border">No contacts yet. Add someone you trust.</li>`;
+      return;
+    }
+    contacts.forEach(c => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center gap-3 rounded-2xl bg-card p-4 ring-1 ring-border';
+      li.innerHTML = `
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-card2"><svg class="icon"><use href="#i-user"/></svg></div>
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-semibold"></p>
+          <p class="truncate text-sm text-muted"></p>
+        </div>
+        <a class="tap flex h-10 w-10 items-center justify-center rounded-full bg-safe" aria-label="Call"><svg class="icon"><use href="#i-phone"/></svg></a>
+        <button class="edit tap flex h-10 w-10 items-center justify-center rounded-full bg-card2" aria-label="Edit"><svg class="icon"><use href="#i-pencil"/></svg></button>
+        <button class="del tap flex h-10 w-10 items-center justify-center rounded-full bg-card2 text-danger" aria-label="Delete"><svg class="icon"><use href="#i-trash"/></svg></button>
+      `;
+      li.querySelector('p.font-semibold').textContent = c.name;
+      li.querySelector('p.text-muted').textContent = c.phone;
+      li.querySelector('a').href = 'tel:' + c.phone;
+      li.querySelector('.edit').addEventListener('click', () => openModal(c));
+      li.querySelector('.del').addEventListener('click', () => {
+        contacts = contacts.filter(x => x.id !== c.id);
+        saveContacts(contacts); renderContacts(); toast('Contact removed');
+      });
+      listEl.appendChild(li);
+    });
+  };
+
+  // Modal
+  const modal = document.getElementById('contact-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const nameIn = document.getElementById('contact-name');
+  const phoneIn = document.getElementById('contact-phone');
+  let editing = null;
+  const openModal = (c) => {
+    editing = c || { id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())), name: '', phone: '' };
+    modalTitle.textContent = c ? 'Edit contact' : 'Add contact';
+    nameIn.value = editing.name; phoneIn.value = editing.phone;
+    modal.classList.remove('hidden');
+    setTimeout(() => nameIn.focus(), 50);
+  };
+  const closeModal = () => modal.classList.add('hidden');
+  document.getElementById('add-contact').addEventListener('click', () => openModal(null));
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const name = nameIn.value.trim(), phone = phoneIn.value.trim();
+    if (!name || !phone) return toast('Name and phone required');
+    const exists = contacts.some(x => x.id === editing.id);
+    const next = { id: editing.id, name, phone };
+    contacts = exists ? contacts.map(x => x.id === editing.id ? next : x) : [...contacts, next];
+    saveContacts(contacts); renderContacts(); closeModal();
+    toast(exists ? 'Contact updated' : 'Contact added');
+  });
+
+  renderContacts();
+
+  // ---------- Map ----------
+  const coordsEl = document.getElementById('coords');
+  const mapsLink = document.getElementById('maps-link');
+document.getElementById('locate-btn').addEventListener('click', () => {
+  if (!('geolocation' in navigator)) return toast('Geolocation unavailable');
+  const btn = document.getElementById('locate-btn');
+  const orig = btn.textContent; btn.textContent = 'Locating…'; btn.disabled = true;
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude: lat, longitude: lng } = pos.coords;
+      coordsEl.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      initMap(lat, lng);
+      mapsLink.href = `https://maps.google.com/?q=${lat},${lng}`;
+      mapsLink.classList.remove('hidden');
+      btn.textContent = orig; btn.disabled = false;
+    },
+    () => { toast('Could not get location'); btn.textContent = orig; btn.disabled = false; },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
+
+// 👇 PASTE HERE
+document.getElementById('nearby-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('nearby-btn');
+
+  if (!marker) {
+    toast("First get your location");
+    return;
+  }
+
+  const originalText = btn.textContent;
+
+  // Start loading
+  btn.textContent = "Searching…";
+  btn.disabled = true;
+
+  try {
+    const pos = marker.getLatLng();
+    await findNearby(pos.lat, pos.lng);
+  } catch (e) {
+    toast("Failed to load nearby help");
+  }
+
+  // Reset button
+  btn.textContent = originalText;
+  btn.disabled = false;
+});
+
+
+  // ---------- Settings ----------
+  const msgInput = document.getElementById('msg-input');
+  const soundToggle = document.getElementById('sound-toggle');
+  const soundKnob = document.getElementById('sound-knob');
+  const modeWA = document.getElementById('mode-wa');
+  const modeSMS = document.getElementById('mode-sms');
+
+  function updateModeUI() {
+    modeWA.classList.remove('bg-safe', 'text-white');
+    modeSMS.classList.remove('bg-safe', 'text-white');
+
+    if (settings.sendMode === 'whatsapp') {
+      modeWA.classList.add('bg-safe', 'text-white');
+    } else {
+      modeSMS.classList.add('bg-safe', 'text-white');
+    }
+  }
+
+  modeWA.addEventListener('click', () => {
+    settings.sendMode = 'whatsapp';
+    updateModeUI();
+  });
+
+  modeSMS.addEventListener('click', () => {
+    settings.sendMode = 'sms';
+    updateModeUI();
+  });
+  const renderSettings = () => {
+    msgInput.value = settings.message;
+    soundToggle.setAttribute('aria-checked', String(settings.soundOn));
+    if (settings.soundOn) {
+      soundToggle.classList.add('bg-safe'); soundToggle.classList.remove('bg-card2');
+      soundKnob.style.left = '22px';
+    } else {
+      soundToggle.classList.remove('bg-safe'); soundToggle.classList.add('bg-card2');
+      soundKnob.style.left = '2px';
+    }
+    updateModeUI();
+  };
+  soundToggle.addEventListener('click', () => {
+    settings = { ...settings, soundOn: !settings.soundOn };
+    renderSettings();
+  });
+  document.getElementById('save-settings').addEventListener('click', () => {
+    settings = { 
+      ...settings, 
+      message: msgInput.value 
+    };
+    saveSettings(settings);
+    toast('Settings saved');
+  });
+  renderSettings();
+})();
+
+let map, marker, nearbyMarkers = [], nearbyPlaces = [];
+
+function initMap(lat = 26.7271, lng = 88.3953) {
+  const location = [lat, lng];
+
+  if (map) {
+    map.setView(location, 15);
+    marker.setLatLng(location);
+    return;
+  }
+
+  map = L.map('map').setView(location, 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+
+  marker = L.marker(location).addTo(map)
+    .bindPopup("You are here")
+    .openPopup();
+}
+
+async function findNearby(lat, lng) {
+  // remove old markers
+nearbyMarkers.forEach(m => {
+  m.remove();
+});
+nearbyMarkers = [];
+
+  const query = `
+  [out:json];
+  (
+    node["amenity"="hospital"](around:3000, ${lat}, ${lng});
+    way["amenity"="hospital"](around:3000, ${lat}, ${lng});
+    relation["amenity"="hospital"](around:3000, ${lat}, ${lng});
+
+    node["amenity"="police"](around:3000, ${lat}, ${lng});
+    way["amenity"="police"](around:3000, ${lat}, ${lng});
+    relation["amenity"="police"](around:3000, ${lat}, ${lng});
+  );
+  out center;
+  `;
+
+  const url = "https://overpass-api.de/api/interpreter?data=" + encodeURIComponent(query);
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+
+nearbyPlaces = [];
+
+data.elements.forEach(place => {
+  let type = place.tags?.amenity;
+  if (!type) return;
+
+  let label = "Unknown";
+  if (type === "hospital") label = "🏥 Hospital";
+  if (type === "police") label = "👮 Police Station";
+
+  const latVal = place.lat || place.center?.lat;
+  const lngVal = place.lon || place.center?.lon;
+
+  if (!latVal || !lngVal) return;
+
+  const item = {
+    name: place.tags.name || "Unknown",
+    lat: latVal,
+    lng: lngVal,
+    type: label
+  };
+
+  nearbyPlaces.push(item);
+
+  const icon = L.icon({
+    iconUrl:
+      type === "hospital"
+        ? "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
+        : "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+    iconSize: [32, 32]
+  });
+
+  const m = L.marker([item.lat, item.lng], { icon }).addTo(map)
+    .bindTooltip(`<b>${item.name}</b><br>${item.type}`, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -10]
+    });
+
+  nearbyMarkers.push(m);
+});
+
+renderNearbyList();
+
+  } catch (e) {
+    alert("Failed to load nearby places");
+  }
+}
+
+function renderNearbyList() {
+  const list = document.getElementById("nearby-list");
+  list.innerHTML = "";
+
+  if (nearbyPlaces.length === 0) {
+    list.innerHTML = `<p class="text-sm text-muted text-center">No nearby places found</p>`;
+    return;
+  }
+
+  nearbyPlaces.forEach(place => {
+    const card = document.createElement("div");
+    card.className = `
+      bg-card/80 backdrop-blur
+      p-4 rounded-2xl ring-1 ring-border
+      hover:ring-info/40 hover:scale-[1.02]
+      transition-all duration-200
+      tap shadow-lg
+    `;
+
+    card.innerHTML = `
+      <div class="flex justify-between items-center gap-3">
+        <div class="min-w-0">
+          <p class="font-semibold truncate">${place.name}</p>
+          <p class="text-xs text-muted">${place.type}</p>
+        </div>
+
+        <button class="bg-info/90 hover:bg-info active:scale-95 transition-all
+ px-4 py-2 rounded-xl text-xs font-semibold shadow-md">
+          Directions
+        </button>
+      </div>
+    `;
+
+    card.classList.add("list-item");
+
+    // Focus map when clicked
+card.addEventListener("click", (e) => {
+  if (e.target.tagName === "BUTTON") return; // ✅ prevent conflict
+  map.setView([place.lat, place.lng], 17);
+});
+
+    // Open Google Maps directions
+    card.querySelector("button").addEventListener("click", (e) => {
+      e.stopPropagation();
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`);
+    });
+
+    list.appendChild(card);
+  });
+}
+</script>
+</body>
+</html>
