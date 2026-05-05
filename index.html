@@ -107,6 +107,47 @@
   background: #22c55e;
   color: white;
 }
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+}
+
+.action-item:hover {
+  background: rgba(255,255,255,0.08);
+  transform: scale(1.02);
+}
+
+.action-item:active {
+  transform: scale(0.96);
+}
+
+.action-item span:first-child {
+  font-weight: 500;
+  color: rgba(255,255,255,0.9);
+}
+
+.action-item .num {
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+}
+.contact-style:hover {
+  transform: scale(1.01);
+}
+@keyframes zoomIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+#more-actions-modal > div {
+  animation: zoomIn 0.25s ease;
+}
 </style>
 </head>
 <body class="min-h-screen">
@@ -201,9 +242,9 @@
           <svg id="siren-icon" class="icon"><use href="#i-siren"/></svg>
           <span id="siren-label" class="text-sm font-semibold">Sound Siren</span>
         </button>
-        <button id="fake-call-btn" class="tap flex items-center justify-center gap-2 rounded-2xl bg-card p-4 ring-1 ring-border">
-          <svg class="icon text-info"><use href="#i-phone-in"/></svg>
-          <span class="text-sm font-semibold">Fake Call</span>
+        <button id="more-actions-btn" class="tap flex items-center justify-center gap-2 rounded-2xl bg-card p-4 ring-1 ring-border">
+          <svg class="icon text-info"><use href="#i-plus"/></svg>
+          <span class="text-sm font-semibold">More Actions</span>
         </button>
       </div>
     </section>
@@ -351,23 +392,100 @@
   </div>
 </div>
 
-<!-- Fake call overlay -->
-<div id="fake-call" class="hidden fixed inset-0 z-50 flex flex-col items-center justify-between bg-bg/95 p-10 backdrop-blur fade-in">
-  <div class="mt-16 flex flex-col items-center gap-4">
-    <p class="text-sm uppercase tracking-[0.3em] text-muted">Incoming call</p>
-    <div class="flex h-32 w-32 items-center justify-center rounded-full bg-card2">
-      <svg width="56" height="56" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+<!-- More Actions Modal -->
+<div id="more-actions-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur p-4">
+
+  <div class="w-full max-w-md mx-4 rounded-3xl bg-gradient-to-b from-[#1e293b] to-[#0f172a] p-6 shadow-2xl ring-1 ring-white/10 fade-in">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-semibold tracking-wide text-white/90">
+        Emergency Numbers
+      </h2>
+
+      <button id="actions-close"
+        class="h-10 w-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition">
+        <svg class="icon text-white/80"><use href="#i-x"/></svg>
+      </button>
     </div>
-    <p class="text-2xl font-semibold">Mom</p>
-    <p class="text-sm text-muted">mobile</p>
-  </div>
-  <div class="flex w-full items-center justify-around pb-10">
-    <button class="fake-close tap flex h-16 w-16 items-center justify-center rounded-full bg-danger shadow-2xl" aria-label="Decline">
-      <svg class="icon" style="width:1.75rem;height:1.75rem;transform:rotate(135deg)"><use href="#i-phone"/></svg>
-    </button>
-    <button class="fake-close tap flex h-16 w-16 items-center justify-center rounded-full bg-safe shadow-2xl" aria-label="Accept">
-      <svg class="icon" style="width:1.75rem;height:1.75rem"><use href="#i-phone"/></svg>
-    </button>
+
+    <!-- List -->
+<div class="flex flex-col gap-3">
+
+  <!-- Women -->
+  <a href="tel:1091"
+     class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+    <div>
+      <p class="font-semibold">Women Helpline</p>
+      <p class="text-sm text-muted">1091</p>
+    </div>
+    <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-500">
+      <svg class="icon text-white"><use href="#i-phone"/></svg>
+    </div>
+  </a>
+
+  <!-- Child -->
+  <a href="tel:1098"
+     class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+    <div>
+      <p class="font-semibold">Child Helpline</p>
+      <p class="text-sm text-muted">1098</p>
+    </div>
+    <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-500">
+      <svg class="icon text-white"><use href="#i-phone"/></svg>
+    </div>
+  </a>
+
+  <!-- Road -->
+  <a href="tel:18002664767"
+     class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+    <div>
+      <p class="font-semibold">Road Assistance</p>
+      <p class="text-sm text-muted">18002664767</p>
+    </div>
+    <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-500">
+      <svg class="icon text-white"><use href="#i-phone"/></svg>
+    </div>
+  </a>
+
+    <!-- Disaster -->
+    <a href="tel:108"
+      class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+      <div>
+        <p class="font-semibold">Disaster / Emergency</p>
+        <p class="text-sm text-muted">108</p>
+      </div>
+      <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-600">
+        <svg class="icon text-white"><use href="#i-phone"/></svg>
+      </div>
+    </a>
+
+    <!-- Senior Citizen -->
+    <a href="tel:14567"
+      class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+      <div>
+        <p class="font-semibold">Senior Citizen Helpline</p>
+        <p class="text-sm text-muted">14567</p>
+      </div>
+      <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-500">
+        <svg class="icon text-white"><use href="#i-phone"/></svg>
+      </div>
+    </a>
+
+    <!-- Mental Health -->
+    <a href="tel:9152987821"
+      class="tap flex items-center justify-between rounded-2xl bg-card2 p-4 ring-1 ring-border transition hover:scale-[1.02] active:scale-[0.97]">
+      <div>
+        <p class="font-semibold">Mental Health Helpline</p>
+        <p class="text-sm text-muted">9152987821</p>
+      </div>
+      <div class="flex h-11 w-11 items-center justify-center rounded-full bg-green-500">
+        <svg class="icon text-white"><use href="#i-phone"/></svg>
+      </div>
+    </a>
+
+</div>
+
   </div>
 </div>
 
@@ -572,10 +690,23 @@
     }
   });
 
-  // ---------- Fake call ----------
-  const fakeCall = document.getElementById('fake-call');
-  document.getElementById('fake-call-btn').addEventListener('click', () => fakeCall.classList.remove('hidden'));
-  document.querySelectorAll('.fake-close').forEach(b => b.addEventListener('click', () => fakeCall.classList.add('hidden')));
+  // ---------- More Actions ----------
+  const actionsModal = document.getElementById('more-actions-modal');
+
+  document.getElementById('more-actions-btn').addEventListener('click', () => {
+    actionsModal.classList.remove('hidden');
+  });
+
+  document.getElementById('actions-close').addEventListener('click', () => {
+    actionsModal.classList.add('hidden');
+  });
+
+  // close on outside click
+  actionsModal.addEventListener('click', (e) => {
+    if (e.target === actionsModal) {
+      actionsModal.classList.add('hidden');
+    }
+  });
 
   // ---------- Contacts ----------
   const listEl = document.getElementById('contacts-list');
