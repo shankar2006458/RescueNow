@@ -371,6 +371,25 @@
   </div>
 </div>
 
+<!-- GPS Permission Popup -->
+<div id="gps-popup" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur hidden">
+  <div class="bg-card p-6 rounded-3xl w-[90%] max-w-sm text-center ring-1 ring-border">
+    <h2 class="text-lg font-bold mb-2">Allow Location Access</h2>
+    <p class="text-sm text-muted mb-5">
+      We need your GPS to send accurate emergency help.
+    </p>
+
+    <div class="flex gap-3">
+      <button id="gps-allow" class="flex-1 py-3 rounded-xl bg-safe font-semibold">
+        Allow
+      </button>
+      <button id="gps-deny" class="flex-1 py-3 rounded-xl bg-card2 font-semibold">
+        Not Now
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
   /* RescueNow — vanilla JS logic */
 (() => {
@@ -414,15 +433,15 @@
       b.classList.toggle('active', b.dataset.tab === tab);
     });
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-if (tab === "map") {
-  setTimeout(() => {
-    if (!map) {
-      initMap();
-    } else {
-      map.invalidateSize(); // ✅ FIX
+    if (tab === "map") {
+      setTimeout(() => {
+        if (!map) {
+          toast("Tap 'Get My Location' to start");
+        } else {
+          map.invalidateSize();
+        }
+      }, 200);
     }
-  }, 200);
-}
   };
   document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   document.querySelectorAll('[data-goto]').forEach(b => b.addEventListener('click', () => showTab(b.dataset.goto)));
@@ -643,12 +662,41 @@ document.getElementById('locate-btn').addEventListener('click', () => {
 });
 
 
+
+function requestLocationPermission() {
+  if (!("geolocation" in navigator)) return;
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      const coordsEl = document.getElementById('coords');
+      const mapsLink = document.getElementById('maps-link');
+
+      if (coordsEl) coordsEl.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      if (mapsLink) {
+        mapsLink.href = `https://maps.google.com/?q=${lat},${lng}`;
+        mapsLink.classList.remove('hidden');
+      }
+
+      setTimeout(() => {
+        if (typeof initMap === "function") initMap(lat, lng);
+      }, 300);
+    },
+    () => toast("Location permission is important for SOS"),
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
+
 // 👇 PASTE HERE
 document.getElementById('nearby-btn').addEventListener('click', async () => {
   const btn = document.getElementById('nearby-btn');
 
   if (!marker) {
-    toast("First get your location");
+    toast("Getting your location...");
+    requestLocationPermission();
     return;
   }
 
@@ -723,11 +771,46 @@ document.getElementById('nearby-btn').addEventListener('click', async () => {
     toast('Settings saved');
   });
   renderSettings();
+
+  window.addEventListener("load", () => {
+    const popup = document.getElementById("gps-popup");
+    const allowBtn = document.getElementById("gps-allow");
+    const denyBtn = document.getElementById("gps-deny");
+
+    navigator.permissions.query({ name: "geolocation" }).then(result => {
+      if (result.state !== "granted") {
+        popup.classList.remove("hidden");
+      }
+    });
+
+    allowBtn.addEventListener("click", () => {
+      popup.classList.add("hidden");
+
+      toast("Requesting location permission...");
+
+      setTimeout(() => {
+        requestLocationPermission();
+      }, 200);
+    });
+
+    denyBtn.addEventListener("click", () => {
+      popup.classList.add("hidden");
+      toast("Location disabled. Some features may not work");
+    });
+  });
 })();
+
 
 let map, marker, nearbyMarkers = [], nearbyPlaces = [];
 
-function initMap(lat = 26.7271, lng = 88.3953) {
+function initMap(lat, lng) {
+  if (!lat || !lng) {
+    // show empty state instead of fake location
+    const coordsEl = document.getElementById('coords');
+    if (coordsEl) coordsEl.textContent = "Location not loaded";
+    return;
+  }
+
   const location = [lat, lng];
 
   if (map) {
@@ -747,7 +830,25 @@ function initMap(lat = 26.7271, lng = 88.3953) {
     .openPopup();
 }
 
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+
+  const a =
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI/180) *
+    Math.cos(lat2 * Math.PI/180) *
+    Math.sin(dLon/2) *
+    Math.sin(dLon/2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return (R * c).toFixed(2);
+}
+
 async function findNearby(lat, lng) {
+  const userLat = lat;
+  const userLng = lng;
   // remove old markers
 nearbyMarkers.forEach(m => {
   m.remove();
@@ -789,11 +890,14 @@ data.elements.forEach(place => {
 
   if (!latVal || !lngVal) return;
 
+  const distance = getDistance(userLat, userLng, latVal, lngVal);
+
   const item = {
     name: place.tags.name || "Unknown",
     lat: latVal,
     lng: lngVal,
-    type: label
+    type: label,
+    distance
   };
 
   nearbyPlaces.push(item);
@@ -846,7 +950,7 @@ function renderNearbyList() {
       <div class="flex justify-between items-center gap-3">
         <div class="min-w-0">
           <p class="font-semibold truncate">${place.name}</p>
-          <p class="text-xs text-muted">${place.type}</p>
+          <p class="text-xs text-muted">${place.type} • ${place.distance} km</p>
         </div>
 
         <button class="bg-info/90 hover:bg-info active:scale-95 transition-all
