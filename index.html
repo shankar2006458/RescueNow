@@ -148,6 +148,10 @@
 #more-actions-modal > div {
   animation: zoomIn 0.25s ease;
 }
+body.modal-open {
+  overflow: hidden;
+  touch-action: none;
+}
 </style>
 </head>
 <body class="min-h-screen">
@@ -184,8 +188,12 @@
     <section id="screen-home" class="screen active px-5 pb-32 pt-4 fade-in">
       <header class="glass flex items-center justify-between rounded-2xl px-4 py-3">
         <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-card2">
-            <svg class="icon"><use href="#i-user"/></svg>
+          <div class="h-16 w-16 rounded-full object-cover shadow-[0_0_8px_rgba(239,68,68,0.5)]">
+            <img 
+              src="https://files.catbox.moe/awoonm.png" 
+              alt="RescueNow Logo"
+              class="h-16 w-16 rounded-full object-cover"
+            />
           </div>
           <div>
             <p class="text-xs text-muted">Welcome</p>
@@ -695,16 +703,19 @@
 
   document.getElementById('more-actions-btn').addEventListener('click', () => {
     actionsModal.classList.remove('hidden');
+    toggleBodyScroll(true);
   });
 
   document.getElementById('actions-close').addEventListener('click', () => {
     actionsModal.classList.add('hidden');
+    toggleBodyScroll(false);
   });
 
   // close on outside click
   actionsModal.addEventListener('click', (e) => {
     if (e.target === actionsModal) {
       actionsModal.classList.add('hidden');
+      toggleBodyScroll(false);
     }
   });
 
@@ -773,7 +784,7 @@
   // ---------- Map ----------
   const coordsEl = document.getElementById('coords');
   const mapsLink = document.getElementById('maps-link');
-document.getElementById('locate-btn').addEventListener('click', () => {
+  document.getElementById('locate-btn').addEventListener('click', () => {
   if (!('geolocation' in navigator)) return toast('Geolocation unavailable');
   const btn = document.getElementById('locate-btn');
   const orig = btn.textContent; btn.textContent = 'Locating…'; btn.disabled = true;
@@ -793,6 +804,9 @@ document.getElementById('locate-btn').addEventListener('click', () => {
 });
 
 
+function toggleBodyScroll(lock) {
+  document.body.classList.toggle("modal-open", lock);
+}
 
 function requestLocationPermission() {
   if (!("geolocation" in navigator)) return;
